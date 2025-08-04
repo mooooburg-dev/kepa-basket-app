@@ -129,8 +129,63 @@ async function searchC005API(barcode: string): Promise<C005Response | null> {
   }
 }
 
+// 등록된 상품 조회 (kepa-basket DB에서)
+async function searchRegisteredProduct(barcode: string): Promise<ProductInfo | null> {
+  try {
+    console.log(`🏪 등록된 상품 조회 시작: ${barcode}`);
+    
+    const response = await fetch(`http://192.168.123.104:3002/api/products/register?barcode=${barcode}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.log(`📋 등록된 상품 조회 실패: ${response.status}`);
+      return null;
+    }
+
+    const result = await response.json();
+    
+    if (result.success && result.found && result.product) {
+      console.log(`✅ 등록된 상품 발견:`, result.product);
+      
+      return {
+        reportNo: result.product.id,
+        productName: result.product.productName,
+        company: result.product.company,
+        country: result.product.country,
+        category: result.product.category,
+        barcode: result.product.barcode,
+        lastUpdated: result.product.updatedAt,
+        source: 'USER_REGISTERED'
+      };
+    } else {
+      console.log(`📋 등록된 상품 없음: ${barcode}`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`💥 등록된 상품 조회 중 오류:`, error);
+    return null;
+  }
+}
+
 // 두 API를 병렬로 호출하여 상품 검색
 export async function searchFoodByBarcode(barcode: string): Promise<ProductInfo | null> {
+  // 1단계: 먼저 등록된 상품인지 확인
+  console.log(`🔍 상품 검색 시작: ${barcode}`);
+  
+  const registeredProduct = await searchRegisteredProduct(barcode);
+  if (registeredProduct) {
+    console.log(`✅ 등록된 상품 찾음: ${registeredProduct.productName}`);
+    return registeredProduct;
+  }
+
+  // 2단계: 등록된 상품이 없으면 Food Safety Korea API 검색
+  console.log(`🌐 Food Safety Korea API 검색 시작: ${barcode}`);
+  
+  // 3단계: 샘플 데이터 확인
   // 샘플 데이터 사용 시 로그 출력
   if (isUsingSampleData()) {
     console.log('⚠️  샘플 데이터를 사용 중입니다. 실제 데이터를 사용하려면 API 키를 설정하세요.');
