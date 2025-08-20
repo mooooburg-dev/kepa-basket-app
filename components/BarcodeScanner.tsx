@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Text, View, StyleSheet, Button, Dimensions, TouchableOpacity, Vibration } from 'react-native';
-import { CameraView, Camera, FlashMode } from 'expo-camera';
+import { CameraView, Camera, FlashMode, CameraType } from 'expo-camera';
 
 interface BarcodeScannerProps {
   onScanSuccess: (barcode: string) => void;
@@ -14,9 +14,12 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
   const [scanning, setScanning] = useState(false);
   const [lastScannedData, setLastScannedData] = useState<string>('');
   const [scanAttempts, setScanAttempts] = useState(0);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [autoFocus, setAutoFocus] = useState<'on' | 'off'>('on');
   const cameraRef = useRef<CameraView>(null);
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastScanTime = useRef<number>(0);
+  const focusTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const getCameraPermissions = async () => {
@@ -25,6 +28,18 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
     };
 
     getCameraPermissions();
+  }, []);
+
+  // 컴포넌트 언마운트 시 timeout 정리
+  useEffect(() => {
+    return () => {
+      if (scanTimeoutRef.current) {
+        clearTimeout(scanTimeoutRef.current);
+      }
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
@@ -89,6 +104,37 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
     setFlashOn(!flashOn);
   };
 
+  const handleTouchToFocus = (event: any) => {
+    const { locationX, locationY } = event.nativeEvent;
+    const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+    
+    // 터치 좌표를 카메라 좌표계로 변환 (0-1 범위)
+    const x = locationX / screenWidth;
+    const y = locationY / screenHeight;
+    
+    console.log(`📸 터치 포커스: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+    
+    // 포커스 포인트 표시
+    setFocusPoint({ x: locationX, y: locationY });
+    
+    // 카메라 포커스 설정
+    if (cameraRef.current) {
+      // expo-camera의 포커스 기능 활용
+      setAutoFocus('off');
+      setTimeout(() => {
+        setAutoFocus('on');
+      }, 100);
+    }
+    
+    // 포커스 포인트 표시를 2초 후 제거
+    if (focusTimeoutRef.current) {
+      clearTimeout(focusTimeoutRef.current);
+    }
+    focusTimeoutRef.current = setTimeout(() => {
+      setFocusPoint(null);
+    }, 2000);
+  };
+
   if (hasPermission === null) {
     return (
       <View style={styles.container}>
@@ -108,20 +154,26 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
 
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
+      <TouchableOpacity
         style={StyleSheet.absoluteFillObject}
-        facing="back"
-        flash={flashOn ? 'on' : 'off'}
-        onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
-        barcodeScannerSettings={{
-          barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128", "code39", "code93"],
-        }}
-        enableTorch={flashOn}
-        autofocus="on"
-        ratio="16:9"
-        pictureSize="1920x1080"
-      />
+        activeOpacity={1}
+        onPress={handleTouchToFocus}
+      >
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFillObject}
+          facing="back"
+          flash={flashOn ? 'on' : 'off'}
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+          barcodeScannerSettings={{
+            barcodeTypes: ["ean13", "ean8", "upc_a", "upc_e", "code128", "code39", "code93"],
+          }}
+          enableTorch={flashOn}
+          autofocus={autoFocus}
+          ratio="16:9"
+          pictureSize="1920x1080"
+        />
+      </TouchableOpacity>
       
       {/* 스캔 영역 오버레이 */}
       <View style={styles.overlay}>
@@ -150,6 +202,19 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
         </TouchableOpacity>
       </View>
 
+      {/* 터치 포커스 포인트 표시 */}
+      {focusPoint && (
+        <View
+          style={[
+            styles.focusPoint,
+            {
+              left: focusPoint.x - 25,
+              top: focusPoint.y - 25,
+            },
+          ]}
+        />
+      )}
+
       {/* 하단 정보 및 컨트롤 */}
       <View style={styles.bottomInfo}>
         <Text style={styles.instructionText}>
@@ -169,7 +234,7 @@ export default function BarcodeScanner({ onScanSuccess, onCancel }: BarcodeScann
           }
         </Text>
         <Text style={styles.debugText}>
-          💡 팁: 바코드를 수평으로 맞추고 15-20cm 거리에서 스캔하세요
+          💡 팁: 화면을 터치하여 포커스를 맞추고, 바코드를 15-20cm 거리에서 스캔하세요
         </Text>
         {scanned && (
           <TouchableOpacity style={styles.rescanButton} onPress={resetScan}>
@@ -358,5 +423,15 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 14,
     fontWeight: '500',
+  },
+  focusPoint: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#00FF00',
+    backgroundColor: 'transparent',
+    opacity: 0.8,
   },
 });
