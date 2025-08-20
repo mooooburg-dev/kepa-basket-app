@@ -47,8 +47,7 @@ npm run web
   - WebView loading of @kepa-basket web application
   - Mode switching between 'web' and 'scan' modes
   - Barcode scanning with expo-camera
-  - Food Safety Korea API integration (I2570 + C005)
-  - Message routing between WebView and native features
+  - Message routing between WebView and native barcode scanner
 
 - **BarcodeScanner.tsx**: Native barcode scanning component with:
   - Camera permission handling
@@ -57,11 +56,7 @@ npm run web
   - Scan validation and error handling
   - Visual feedback and guidance
 
-- **services/foodSafetyApi.ts**: API integration for food safety data:
-  - Dual API support (I2570: 축산물이력제, C005: 식품등록정보)
-  - Parallel API calls for better coverage
-  - Comprehensive error handling and logging
-  - Configurable API keys
+- **components/BarcodeScanner.tsx**: Native barcode scanning component with camera integration
 
 ### Communication Protocol
 
@@ -79,67 +74,16 @@ The apps communicate via `postMessage` with structured JSON messages:
 }
 ```
 
-#### Native → WebView (Scan Results)
+#### Native → WebView (Barcode Data)
 
-**Success Response:**
+**Barcode Scanned Response:**
 ```json
 {
-  "type": "barcode_success",
-  "success": true,
+  "type": "barcode_scanned",
   "data": {
     "barcode": "8801234567890",
-    "productInfo": {
-      "productName": "Product Name",
-      "company": "Company Name", 
-      "country": "Country",
-      "category": "Category",
-      "source": "I2570",
-      "sourceLabel": "축산물이력제"
-    },
-    "debug": {
-      "scanId": "scan_1704123456789",
-      "scanTime": "2024-01-01T12:34:56.789Z",
-      "apiDuration": 1250,
-      "usingSampleData": false,
-      "foundIn": "I2570",
-      "searchResult": "found"
-    }
-  }
-}
-```
-
-**Not Found Response:**
-```json
-{
-  "type": "barcode_not_found",
-  "success": false,
-  "data": {
-    "barcode": "1234567890123",
-    "error": "해당 바코드로 등록된 제품을 찾을 수 없습니다",
-    "debug": {
-      "scanId": "scan_1704123456790",
-      "searchedAPIs": ["I2570", "C005"],
-      "searchResult": "not_found"
-    }
-  }
-}
-```
-
-**Error Response:**
-```json
-{
-  "type": "barcode_error",
-  "success": false,
-  "data": {
-    "barcode": "8801234567890",
-    "error": "API 요청 시간이 초과되었습니다",
-    "debug": {
-      "scanId": "scan_1704123456791",
-      "errorCode": "TIMEOUT_ERROR",
-      "errorDetails": "API request timeout",
-      "totalDuration": 10500,
-      "searchResult": "error"
-    }
+    "scanId": "scan_1704123456789",
+    "timestamp": 1704123456789
   }
 }
 ```
@@ -156,21 +100,14 @@ The apps communicate via `postMessage` with structured JSON messages:
 - **Node Version**: v22.17.1 (specified in .nvmrc)
 - **TypeScript**: Extends Expo's base config with strict mode enabled
 - **Expo Config**: Portrait orientation, New Architecture enabled, supports iOS/Android/Web
-- **API Configuration**: Food Safety Korea API keys in `config/api.ts`
-- **WebView Target**: Currently pointing to `http://192.168.123.104:3000` (adjust for local @kepa-basket server)
+- **WebView Target**: Currently pointing to `http://192.168.123.104:3001` (adjust for local @kepa-basket server)
 
 ## API Integration
 
 ### Food Safety Korea API
-- **I2570 API**: 축산물이력제 (Livestock traceability)
-- **C005 API**: 식품등록정보 (Food registration info)
-- **Configuration**: Set `FOOD_SAFETY_API_KEY` in `.env` or `config/api.ts`
-- **Sample Key**: `f5f2c3dc00b14704909a` (included for testing)
-
-### API Response Priority
-1. I2570 API results (preferred)
-2. C005 API results (fallback)
-3. "Not found" if both APIs return no results
+- **API Integration**: Now handled by the @kepa-basket web application
+- **Mobile App Role**: Only captures and transmits barcode data
+- **Web App Role**: Receives barcode data and performs all API calls
 
 ## Development Workflow
 
@@ -199,13 +136,13 @@ npm start            # Expo development server
 - Handle loading states and error conditions gracefully
 
 ### Communication Best Practices
-- Always include debug information in postMessage responses
-- Use structured JSON messages for complex data
-- Implement proper error handling for API failures
+- Keep mobile app focused on barcode scanning only
+- Send simple, structured barcode data to web app
+- Let web app handle all API integrations and error handling
 - Track scan sessions with unique IDs for debugging
 
 ### Testing
 - Test barcode scanning with various barcode formats
-- Verify API responses for both successful and failed lookups
+- Verify barcode data transmission to web app
 - Test WebView communication in different network conditions
-- Validate error handling for API timeouts and failures
+- Validate that web app receives and processes barcode data correctly
